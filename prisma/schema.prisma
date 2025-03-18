@@ -11,22 +11,22 @@ datasource db {
 }
 
 model Visitor {
-  id          Int       @id @default(autoincrement())
-  name        String
-  email       String
-  phone       String
-  company     String?
-  hostName    String
-  purpose     String
-  signature   String?  // Stores the base64 signature data
-  signInTime  DateTime @default(now())
-  signOutTime DateTime?
-  isSignedOut Boolean  @default(false)
-  visitPurpose String
-  type        String    // "Contractor" or "Visitor"
-  visits      Visit[]
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id           Int       @id @default(autoincrement())
+  name         String
+  email        String
+  phone        String
+  company      String?
+  hostName     String    // Keep this field
+  visitPurpose String    
+  signature    String?
+  notes        String?
+  type         String    
+  signInTime   DateTime  @default(now())
+  signOutTime  DateTime?
+  isSignedOut  Boolean   @default(false)
+  visits       Visit[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
 }
 
 model Visit {

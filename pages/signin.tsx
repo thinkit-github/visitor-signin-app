@@ -25,43 +25,21 @@ const SignInForm: React.FC = () => {
 
     // Initialize signature pad on component mount with proper sizing
     useEffect(() => {
-        if (!signaturePadRef.current || !canvasRef.current) return;
-
-        const canvas = canvasRef.current;
-        const container = signaturePadRef.current;
-        
-        // Set canvas width and height to match container
-        const resizeCanvas = () => {
+        if (signaturePadRef.current && canvasRef.current) {
+            const canvas = canvasRef.current;
             const ratio = Math.max(window.devicePixelRatio || 1, 1);
-            canvas.width = container.offsetWidth * ratio;
-            canvas.height = container.offsetHeight * ratio;
+            canvas.width = canvas.offsetWidth * ratio;
+            canvas.height = canvas.offsetHeight * ratio;
             canvas.getContext('2d')?.scale(ratio, ratio);
-            
-            // Clear the canvas when resizing
-            if (signaturePad) {
-                signaturePad.clear();
-            }
-        };
-        
-        // Call resize initially
-        resizeCanvas();
-        
-        // Initialize signature pad after resizing
-        const pad = new SignaturePad(canvas, {
-            backgroundColor: 'rgba(255, 255, 255, 0)',
-            penColor: 'black',
-            minWidth: 1,
-            maxWidth: 2.5
-        });
-        setSignaturePad(pad);
-        
-        // Add resize listener
-        window.addEventListener('resize', resizeCanvas);
-        
-        // Clean up
-        return () => {
-            window.removeEventListener('resize', resizeCanvas);
-        };
+
+            const pad = new SignaturePad(canvas, {
+                backgroundColor: 'rgba(255, 255, 255, 0)', // Transparent background
+                penColor: 'rgb(0, 0, 0)',
+                minWidth: 1,
+                maxWidth: 2.5
+            });
+            setSignaturePad(pad);
+        }
     }, []);
 
     const onSubmit = async (data: FormData) => {
@@ -73,16 +51,21 @@ const SignInForm: React.FC = () => {
         setSignatureError(false);
         
         try {
-            // Get the signature as base64 image data with lower quality
-            const signatureData = signaturePad.toDataURL('image/jpeg', 0.5);
+            const signatureData = signaturePad.toDataURL('image/png', 1.0);
             
-            // Combine form data with signature
             const visitorData = {
-                ...data,
+                name: data.name,
+                email: data.email,
+                phone: data.phone,
+                company: data.company || '',
+                hostName: data.hostName,
+                purpose: data.purpose,
                 signature: signatureData,
+                notes: data.notes || '',
+                visitorType: data.visitorType || 'Visitor',
             };
             
-            console.log('Submitting visitor data...');
+            console.log('Submitting visitor data:', visitorData);
             
             const response = await fetch('/api/visitors', {
                 method: 'POST',
@@ -92,17 +75,17 @@ const SignInForm: React.FC = () => {
                 body: JSON.stringify(visitorData),
             });
             
-            if (response.ok) {
-                console.log('Submit successful, redirecting...');
-                router.push('/signin/success');
-            } else {
-                const errorData = await response.json();
-                console.error('Failed to submit visitor data:', errorData);
-                alert(`Failed to save: ${errorData.error || 'Unknown error'}`);
+            const responseData = await response.json();
+            
+            if (!response.ok) {
+                throw new Error(responseData.details || responseData.error || 'Failed to submit');
             }
+            
+            // If successful, redirect
+            router.push('/signin/success');
         } catch (error) {
             console.error('Error submitting visitor data:', error);
-            alert('An error occurred while saving your information. Please try again.');
+            alert(error instanceof Error ? error.message : 'Failed to save visitor information. Please try again.');
         }
     };
 

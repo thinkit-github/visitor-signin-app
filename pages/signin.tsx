@@ -1,404 +1,292 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useRef, useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import Link from 'next/link';
 import { useRouter } from 'next/router';
+import SignaturePad from 'signature_pad';
+import Link from 'next/link';
 
 type FormData = {
   name: string;
-  company: string;
   email: string;
   phone: string;
-  visitPurpose: string;
-  type: 'Contractor' | 'Visitor';
+  company?: string;
   hostName: string;
-  notes: string;
-  signature: string;
+  purpose: string;
+  notes?: string;
+  visitorType: string;
 };
 
-const SignIn = () => {
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [showWelcome, setShowWelcome] = useState(false);
-  const [visitorName, setVisitorName] = useState('');
-  const [isDrawing, setIsDrawing] = useState(false);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const router = useRouter();
-  
-  const { register, handleSubmit, reset, setValue, watch, formState: { errors } } = useForm<FormData>();
-  const name = watch('name');
-  
-  // Initialize canvas for signature
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (canvas) {
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.lineWidth = 2;
-        ctx.lineCap = 'round';
-        ctx.strokeStyle = '#000';
-        
-        // Clear canvas
-        ctx.fillStyle = '#f9fafb';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Add a light border
-        ctx.strokeStyle = '#e5e7eb';
-        ctx.strokeRect(0, 0, canvas.width, canvas.height);
-        
-        // Reset stroke style for drawing
-        ctx.strokeStyle = '#000';
-      }
-    }
-  }, []);
-  
-  const startDrawing = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    setIsDrawing(true);
-    
-    // Get position
-    let x, y;
-    if ('touches' in e) {
-      // Touch event
-      const rect = canvas.getBoundingClientRect();
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-    } else {
-      // Mouse event
-      x = e.nativeEvent.offsetX;
-      y = e.nativeEvent.offsetY;
-    }
-    
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-  };
-  
-  const draw = (e: React.MouseEvent<HTMLCanvasElement> | React.TouchEvent<HTMLCanvasElement>) => {
-    if (!isDrawing) return;
-    
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    // Get position
-    let x, y;
-    if ('touches' in e) {
-      // Touch event
-      const rect = canvas.getBoundingClientRect();
-      x = e.touches[0].clientX - rect.left;
-      y = e.touches[0].clientY - rect.top;
-      
-      // Prevent scrolling when drawing
-      e.preventDefault();
-    } else {
-      // Mouse event
-      x = e.nativeEvent.offsetX;
-      y = e.nativeEvent.offsetY;
-    }
-    
-    ctx.lineTo(x, y);
-    ctx.stroke();
-  };
-  
-  const endDrawing = () => {
-    setIsDrawing(false);
-    
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    // Save signature as data URL
-    const signatureData = canvas.toDataURL('image/png');
-    setValue('signature', signatureData);
-  };
-  
-  const clearSignature = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
-    
-    // Clear canvas
-    ctx.fillStyle = '#f9fafb';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    // Add a light border
-    ctx.strokeStyle = '#e5e7eb';
-    ctx.strokeRect(0, 0, canvas.width, canvas.height);
-    
-    // Reset stroke style for drawing
-    ctx.strokeStyle = '#000';
-    
-    // Clear signature value
-    setValue('signature', '');
-  };
-  
-  const onSignIn = async (data: FormData) => {
-    // Check if signature is provided
-    if (!data.signature) {
-      setError('Please provide your signature');
-      return;
-    }
-    
-    setLoading(true);
-    setError('');
-    
-    try {
-      const response = await fetch('/api/visits/signin', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to sign in');
-      }
-      
-      setSuccess('Sign-in successful!');
-      setVisitorName(data.name);
-      
-      // Show welcome popup
-      setShowWelcome(true);
-      
-      // Reset form
-      reset();
-      clearSignature();
-      
-      // Redirect to home after 5 seconds
-      setTimeout(() => {
-        router.push('/');
-      }, 5000);
-    } catch (err) {
-      setError('An error occurred. Please try again.');
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+const SignInForm: React.FC = () => {
+    const { register, handleSubmit, formState: { errors } } = useForm<FormData>();
+    const signaturePadRef = useRef<HTMLDivElement>(null);
+    const canvasRef = useRef<HTMLCanvasElement>(null);
+    const [signaturePad, setSignaturePad] = useState<SignaturePad | null>(null);
+    const [signatureError, setSignatureError] = useState(false);
+    const router = useRouter();
 
-  return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
-      <header className="bg-white shadow">
-        <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900">
-            Visitor Sign-In
-          </h1>
-          <Link href="/" className="text-primary-600 hover:text-primary-800">
-            Back to Home
-          </Link>
-        </div>
-      </header>
-      
-      <main className="flex-grow flex items-center justify-center p-4">
-        <div className="max-w-md w-full">
-          <div className="bg-white shadow-md rounded-lg overflow-hidden">
-            {error && (
-              <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
-                <p className="text-red-700">{error}</p>
-              </div>
-            )}
+    // Initialize signature pad on component mount with proper sizing
+    useEffect(() => {
+        if (!signaturePadRef.current || !canvasRef.current) return;
+
+        const canvas = canvasRef.current;
+        const container = signaturePadRef.current;
+        
+        // Set canvas width and height to match container
+        const resizeCanvas = () => {
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            canvas.width = container.offsetWidth * ratio;
+            canvas.height = container.offsetHeight * ratio;
+            canvas.getContext('2d')?.scale(ratio, ratio);
             
-            {success && !showWelcome && (
-              <div className="bg-green-50 border-l-4 border-green-500 p-4 mb-4">
-                <p className="text-green-700">{success}</p>
-              </div>
-            )}
+            // Clear the canvas when resizing
+            if (signaturePad) {
+                signaturePad.clear();
+            }
+        };
+        
+        // Call resize initially
+        resizeCanvas();
+        
+        // Initialize signature pad after resizing
+        const pad = new SignaturePad(canvas, {
+            backgroundColor: 'rgba(255, 255, 255, 0)',
+            penColor: 'black',
+            minWidth: 1,
+            maxWidth: 2.5
+        });
+        setSignaturePad(pad);
+        
+        // Add resize listener
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Clean up
+        return () => {
+            window.removeEventListener('resize', resizeCanvas);
+        };
+    }, []);
+
+    const onSubmit = async (data: FormData) => {
+        if (!signaturePad || signaturePad.isEmpty()) {
+            setSignatureError(true);
+            return;
+        }
+        
+        setSignatureError(false);
+        
+        try {
+            // Get the signature as base64 image data with lower quality
+            const signatureData = signaturePad.toDataURL('image/jpeg', 0.5);
             
-            {/* Welcome Popup */}
-            {showWelcome && (
-              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                <div className="bg-white rounded-lg shadow-xl p-8 max-w-md mx-4 animate-fade-in">
-                  <div className="text-center">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-16 w-16 text-green-500 mx-auto mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
-                    <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome, {visitorName}!</h2>
-                    <p className="text-gray-600 mb-6">Your sign-in has been successfully recorded.</p>
-                    <p className="text-gray-500 text-sm">Redirecting to home page in 5 seconds...</p>
-                  </div>
-                </div>
-              </div>
-            )}
+            // Combine form data with signature
+            const visitorData = {
+                ...data,
+                signature: signatureData,
+            };
             
-            <div className="p-6">
-              <form onSubmit={handleSubmit(onSignIn)} className="space-y-4">
-                <div>
-                  <label htmlFor="name" className="label">
-                    Full Name *
-                  </label>
-                  <input
-                    id="name"
-                    type="text"
-                    className="input input-lg"
-                    placeholder="Enter your full name"
-                    {...register('name', { required: 'Name is required' })}
-                  />
-                  {errors.name && (
-                    <p className="mt-1 text-red-600 text-sm">{errors.name.message}</p>
-                  )}
-                </div>
-                
-                <div>
-                  <label htmlFor="company" className="label">
-                    Company
-                  </label>
-                  <input
-                    id="company"
-                    type="text"
-                    className="input input-lg"
-                    placeholder="Enter your company name"
-                    {...register('company')}
-                  />
-                </div>
-                
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label htmlFor="email" className="label">
-                      Email
-                    </label>
-                    <input
-                      id="email"
-                      type="email"
-                      className="input input-lg"
-                      placeholder="Enter your email"
-                      {...register('email')}
-                    />
-                  </div>
-                  
-                  <div>
-                    <label htmlFor="phone" className="label">
-                      Phone Number *
-                    </label>
-                    <input
-                      id="phone"
-                      type="tel"
-                      className="input input-lg"
-                      placeholder="Enter your phone number"
-                      {...register('phone', { required: 'Phone number is required' })}
-                    />
-                    {errors.phone && (
-                      <p className="mt-1 text-red-600 text-sm">{errors.phone.message}</p>
-                    )}
-                  </div>
-                </div>
-                
-                <div>
-                  <label htmlFor="visitPurpose" className="label">
-                    Purpose of Visit *
-                  </label>
-                  <input
-                    id="visitPurpose"
-                    type="text"
-                    className="input input-lg"
-                    placeholder="Enter the purpose of your visit"
-                    {...register('visitPurpose', { required: 'Purpose is required' })}
-                  />
-                  {errors.visitPurpose && (
-                    <p className="mt-1 text-red-600 text-sm">{errors.visitPurpose.message}</p>
-                  )}
-                </div>
-                
-                <div>
-                  <label htmlFor="type" className="label">
-                    Visitor Type *
-                  </label>
-                  <select
-                    id="type"
-                    className="input input-lg"
-                    {...register('type', { required: 'Visitor type is required' })}
-                  >
-                    <option value="Visitor">Visitor</option>
-                    <option value="Contractor">Contractor</option>
-                  </select>
-                  {errors.type && (
-                    <p className="mt-1 text-red-600 text-sm">{errors.type.message}</p>
-                  )}
-                </div>
-                
-                <div>
-                  <label htmlFor="hostName" className="label">
-                    Host Name
-                  </label>
-                  <input
-                    id="hostName"
-                    type="text"
-                    className="input input-lg"
-                    placeholder="Who are you visiting?"
-                    {...register('hostName')}
-                  />
-                </div>
-                
-                <div>
-                  <label htmlFor="notes" className="label">
-                    Notes
-                  </label>
-                  <textarea
-                    id="notes"
-                    className="input input-lg"
-                    rows={3}
-                    placeholder="Any additional information"
-                    {...register('notes')}
-                  ></textarea>
-                </div>
-                
-                {/* Signature Box */}
-                <div>
-                  <label htmlFor="signature" className="label">
-                    Signature *
-                  </label>
-                  <div className="border border-gray-300 rounded-md overflow-hidden">
-                    <canvas
-                      ref={canvasRef}
-                      width={450}
-                      height={150}
-                      className="w-full bg-gray-50 touch-none"
-                      onMouseDown={startDrawing}
-                      onMouseMove={draw}
-                      onMouseUp={endDrawing}
-                      onMouseLeave={endDrawing}
-                      onTouchStart={startDrawing}
-                      onTouchMove={draw}
-                      onTouchEnd={endDrawing}
-                    />
-                  </div>
-                  <input type="hidden" {...register('signature')} />
-                  <div className="mt-2 flex justify-end">
-                    <button
-                      type="button"
-                      className="text-sm text-gray-600 hover:text-gray-900"
-                      onClick={clearSignature}
-                    >
-                      Clear Signature
-                    </button>
-                  </div>
-                  <p className="mt-1 text-gray-500 text-sm">
-                    Please sign using your mouse or finger
-                  </p>
-                </div>
-                
-                <button
-                  type="submit"
-                  className="btn btn-primary btn-lg w-full mt-6"
-                  disabled={loading}
-                >
-                  {loading ? 'Processing...' : 'Sign In'}
-                </button>
-              </form>
+            console.log('Submitting visitor data...');
+            
+            const response = await fetch('/api/visitors', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(visitorData),
+            });
+            
+            if (response.ok) {
+                console.log('Submit successful, redirecting...');
+                router.push('/signin/success');
+            } else {
+                const errorData = await response.json();
+                console.error('Failed to submit visitor data:', errorData);
+                alert(`Failed to save: ${errorData.error || 'Unknown error'}`);
+            }
+        } catch (error) {
+            console.error('Error submitting visitor data:', error);
+            alert('An error occurred while saving your information. Please try again.');
+        }
+    };
+
+    const clearSignature = () => {
+        if (signaturePad) {
+            signaturePad.clear();
+            setSignatureError(false);
+        }
+    };
+
+    return (
+        <div className="container mx-auto px-4 py-8">
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold">Visitor Sign-In</h1>
+                <Link href="/" className="text-blue-500 hover:text-blue-600">
+                    Back to Home
+                </Link>
             </div>
-          </div>
+            
+            <form onSubmit={handleSubmit(onSubmit)} className="max-w-4xl mx-auto bg-white p-8 rounded-lg shadow-lg">
+                <div className="space-y-6">
+                    {/* Full Name */}
+                    <div>
+                        <label htmlFor="name" className="block text-lg font-medium text-gray-700 mb-2">
+                            Full Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            id="name"
+                            type="text"
+                            placeholder="Enter your full name"
+                            {...register('name', { required: true })}
+                            className="w-full px-4 py-4 text-lg border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {errors.name && <span className="text-red-500 text-base mt-1">Name is required</span>}
+                    </div>
+
+                    {/* Company */}
+                    <div>
+                        <label htmlFor="company" className="block text-lg font-medium text-gray-700 mb-2">
+                            Company
+                        </label>
+                        <input
+                            id="company"
+                            type="text"
+                            placeholder="Enter your company name"
+                            {...register('company')}
+                            className="w-full px-4 py-4 text-lg border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+
+                    {/* Email - Full Width on Its Own Row */}
+                    <div>
+                        <label htmlFor="email" className="block text-lg font-medium text-gray-700 mb-2">
+                            Email
+                        </label>
+                        <input
+                            id="email"
+                            type="email"
+                            placeholder="Enter your email"
+                            {...register('email', { required: true })}
+                            className="w-full px-4 py-4 text-lg border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {errors.email && <span className="text-red-500 text-base mt-1">Email is required</span>}
+                    </div>
+
+                    {/* Phone Number - Full Width on Its Own Row */}
+                    <div>
+                        <label htmlFor="phone" className="block text-lg font-medium text-gray-700 mb-2">
+                            Phone Number <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            id="phone"
+                            type="tel"
+                            placeholder="Enter your phone number"
+                            {...register('phone', { required: true })}
+                            className="w-full px-4 py-4 text-lg border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {errors.phone && <span className="text-red-500 text-base mt-1">Phone number is required</span>}
+                    </div>
+
+                    {/* Purpose of Visit */}
+                    <div>
+                        <label htmlFor="purpose" className="block text-lg font-medium text-gray-700 mb-2">
+                            Purpose of Visit <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                            id="purpose"
+                            type="text"
+                            placeholder="Enter the purpose of your visit"
+                            {...register('purpose', { required: true })}
+                            className="w-full px-4 py-4 text-lg border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {errors.purpose && <span className="text-red-500 text-base mt-1">Purpose is required</span>}
+                    </div>
+
+                    {/* Visitor Type */}
+                    <div>
+                        <label htmlFor="visitorType" className="block text-lg font-medium text-gray-700 mb-2">
+                            Visitor Type <span className="text-red-500">*</span>
+                        </label>
+                        <select
+                            id="visitorType"
+                            {...register('visitorType', { required: true })}
+                            className="w-full px-4 py-4 text-lg border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="Visitor">Visitor</option>
+                            <option value="Contractor">Contractor</option>
+                            <option value="Delivery">Delivery</option>
+                            <option value="Interview">Interview</option>
+                        </select>
+                        {errors.visitorType && <span className="text-red-500 text-base mt-1">Visitor type is required</span>}
+                    </div>
+
+                    {/* Person you are visiting (was Host Name) */}
+                    <div>
+                        <label htmlFor="hostName" className="block text-lg font-medium text-gray-700 mb-2">
+                            Person you are visiting
+                        </label>
+                        <input
+                            id="hostName"
+                            type="text"
+                            placeholder="Who are you visiting?"
+                            {...register('hostName', { required: true })}
+                            className="w-full px-4 py-4 text-lg border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        />
+                        {errors.hostName && <span className="text-red-500 text-base mt-1">Host name is required</span>}
+                    </div>
+
+                    {/* Notes */}
+                    <div>
+                        <label htmlFor="notes" className="block text-lg font-medium text-gray-700 mb-2">
+                            Notes
+                        </label>
+                        <textarea
+                            id="notes"
+                            placeholder="Any additional information"
+                            {...register('notes')}
+                            className="w-full px-4 py-4 text-lg border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 min-h-[100px]"
+                        />
+                    </div>
+
+                    {/* Signature */}
+                    <div>
+                        <label htmlFor="signature" className="block text-lg font-medium text-gray-700 mb-2">
+                            Signature <span className="text-red-500">*</span>
+                        </label>
+                        <div 
+                            ref={signaturePadRef}
+                            className="border border-gray-300 rounded-md p-2 h-48 relative"
+                            style={{ touchAction: 'none' }}
+                        >
+                            <canvas 
+                                ref={canvasRef}
+                                className="w-full h-full"
+                                style={{ 
+                                    width: '100%', 
+                                    height: '100%',
+                                    cursor: 'crosshair',
+                                }}
+                            />
+                            <button 
+                                type="button" 
+                                onClick={clearSignature}
+                                className="absolute top-2 right-2 bg-red-500 text-white px-3 py-1 rounded-md text-sm"
+                            >
+                                Clear
+                            </button>
+                        </div>
+                        {signatureError && <span className="text-red-500 text-base mt-1">Signature is required</span>}
+                    </div>
+
+                    {/* Submit Button */}
+                    <div className="flex justify-center mt-8">
+                        <button
+                            type="submit"
+                            className="px-8 py-4 text-xl bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 w-full md:w-auto"
+                        >
+                            Sign In
+                        </button>
+                    </div>
+                </div>
+            </form>
         </div>
-      </main>
-    </div>
-  );
+    );
 };
 
-export default SignIn; 
+export default SignInForm; 

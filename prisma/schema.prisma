@@ -13,9 +13,15 @@ datasource db {
 model Visitor {
   id          Int       @id @default(autoincrement())
   name        String
+  email       String
+  phone       String
   company     String?
-  email       String?
-  phone       String?
+  hostName    String
+  purpose     String
+  signature   String?  // Stores the base64 signature data
+  signInTime  DateTime @default(now())
+  signOutTime DateTime?
+  isSignedOut Boolean  @default(false)
   visitPurpose String
   type        String    // "Contractor" or "Visitor"
   visits      Visit[]
